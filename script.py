@@ -1,9 +1,11 @@
 # SHS Enrollment System (PyQt6)
-# Changes in this version:
-# - Removed Notes and Documents sections from both the RecordDialog and the right-side detail pane.
-# - Made the main window background explicit (application-level stylesheet) so it no longer appears the default gray.
-# - Ensured dialogs keep their soft backgrounds while main window uses a pleasant page background.
-# - Kept the compact, responsive details layout for 1366x763.
+# Adjustments:
+# - Restored the original grouped StudentForm (no layout redesign).
+# - If form is incomplete it shows a single QMessageBox with text: "please fill in all requirements"
+# - Removed "Sample accounts" label from login dialog.
+# - Logout button is now red.
+# - Top user badge shows only the role (admin or staff), not "username (role)".
+# - Removed the left compact status text in the right detail pane; status is only shown on the right (badge or admin combo).
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
@@ -54,7 +56,6 @@ class LoginDialog(QDialog):
         self.setWindowTitle("Login")
         self.setMinimumSize(420, 360)
         self.user = None
-        # Dialog background kept soft
         self.setStyleSheet("background-color: #eef7ff;")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -102,10 +103,7 @@ class LoginDialog(QDialog):
 
         layout.addWidget(container)
 
-        hint = QLabel("Sample accounts: admin / admin123  ·  staff / staff123")
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #666; font-size: 11px;")
-        layout.addWidget(hint)
+        # sample accounts label removed
 
         self._ensure_users_file()
         self.username_edit.returnPressed.connect(lambda: self.password_edit.setFocus())
@@ -148,7 +146,6 @@ class RecordDialog(QDialog):
         self.setWindowTitle("Student Record")
         self.setMinimumSize(640, 420)
 
-        # Dialog background kept soft
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0 y1:0, x2:1 y2:1,
@@ -194,6 +191,7 @@ class RecordDialog(QDialog):
         header_layout.addLayout(name_block)
         header_layout.addStretch()
 
+        # keep only the colored badge on the right (remove any left status)
         status = self.student.get("status", "pending")
         badge = QLabel(status.capitalize())
         badge.setProperty("class", "badge")
@@ -214,7 +212,6 @@ class RecordDialog(QDialog):
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(12)
 
-        # Two-column grid for compact horizontal layout (no notes/docs)
         info_grid = QGridLayout()
         info_grid.setHorizontalSpacing(16)
         info_grid.setVerticalSpacing(8)
@@ -237,7 +234,6 @@ class RecordDialog(QDialog):
 
         card_layout.addLayout(info_grid)
 
-        # Buttons area (no notes/docs)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         if self.role == "admin":
@@ -319,11 +315,6 @@ class RecordDialog(QDialog):
 
 
 class StudentsTable(QWidget):
-    """
-    Left: table (narrower)
-    Right: wider responsive detail pane (no notes/docs), using a scroll area and a compact two-column grid
-    Designed for 1366x763 landscape.
-    """
     def __init__(self, role="staff", parent=None):
         super().__init__(parent)
         self.role = role
@@ -384,20 +375,13 @@ class StudentsTable(QWidget):
         detail_v.setContentsMargins(8, 8, 8, 8)
         detail_v.setSpacing(8)
 
-        # header: avatar + compact status (left) and admin combo/right badge (right)
+        # header: avatar on left; only right side shows status (badge or admin combo)
         hdr = QHBoxLayout()
-        left_hdr = QHBoxLayout()
-        left_hdr.setSpacing(8)
         self.lbl_avatar = QLabel("")
         self.lbl_avatar.setFixedSize(56, 56)
         self.lbl_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_avatar.setStyleSheet("background-color: #e6f0ff; color: #1e40af; border-radius: 28px; font-weight:700; font-size:16px;")
-        left_hdr.addWidget(self.lbl_avatar)
-
-        self.lbl_status_small = QLabel("")
-        self.lbl_status_small.setStyleSheet("color:#374151; font-size:11px; padding-left:6px;")
-        left_hdr.addWidget(self.lbl_status_small)
-        hdr.addLayout(left_hdr)
+        hdr.addWidget(self.lbl_avatar)
         hdr.addStretch()
 
         if self.role == "admin":
@@ -592,7 +576,6 @@ class StudentsTable(QWidget):
         self.grid_labels['submitted_by'].setText(f"{s.get('submitted_by','')} ({s.get('submitted_role','')})")
 
         status_text = s.get("status", "pending").capitalize()
-        self.lbl_status_small.setText(status_text)
 
         if self.role == "admin":
             try:
@@ -618,7 +601,6 @@ class StudentsTable(QWidget):
                 self.grid_labels[k].setText("")
             except Exception:
                 pass
-        self.lbl_status_small.setText("")
         if self.role == "admin":
             try:
                 self.admin_status_combo.setCurrentIndex(0)
@@ -747,19 +729,20 @@ class StudentForm(QWidget):
         email = self.email.text().strip(); phone = self.phone.text().strip()
         gn = self.guardian_name.text().strip(); gp = self.guardian_phone.text().strip()
         prev = self.prev_school.text().strip()
+        # single message if incomplete
         if not (fn and ln and dob and email and phone and gn and gp and prev):
-            QMessageBox.warning(self, "Form incomplete", "Please fill in all required fields.")
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements")
             return
         if self.gender.currentIndex() == 0:
-            QMessageBox.warning(self, "Form incomplete", "Please select a valid Gender."); return
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements"); return
         if self.guardian_relation.currentIndex() == 0:
-            QMessageBox.warning(self, "Form incomplete", "Please select Guardian Relation."); return
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements"); return
         if self.strand.currentIndex() == 0:
-            QMessageBox.warning(self, "Form incomplete", "Please select a Strand."); return
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements"); return
         if self.semester.currentIndex() == 0:
-            QMessageBox.warning(self, "Form incomplete", "Please select a Semester."); return
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements"); return
         if self.school_year.currentIndex() == 0:
-            QMessageBox.warning(self, "Form incomplete", "Please select a School Year."); return
+            QMessageBox.warning(self, "Form incomplete", "please fill in all requirements"); return
 
         student = {
             "first_name": fn,
@@ -795,25 +778,20 @@ class StudentForm(QWidget):
 class MainWindow(QWidget):
     def __init__(self, user):
         super().__init__()
-        self.setObjectName("mainWindow")  # used by application stylesheet
+        self.setObjectName("mainWindow")
         self.user = user or {"username": "unknown", "role": "staff"}
-        self.setWindowTitle(f"SHS Enrollment System - {self.user['username']} ({self.user['role']})")
-        self.setMinimumSize(1000, 640)
-
-        # Set a pleasant page background color for the main window
-        # (frames/cards inside remain white or their own colors)
+        # show only role text (admin or staff)
+        self.setWindowTitle(f"SHS Enrollment System - {self.user.get('role','')}")
         self.setStyleSheet("QWidget#mainWindow { background-color: #f3f7ff; }")
 
-        main_layout = QVBoxLayout(self); main_layout.setContentsMargins(18, 18, 18, 18)
-        main_layout.setSpacing(12)
+        main_layout = QVBoxLayout(self); main_layout.setContentsMargins(18, 18, 18, 18); main_layout.setSpacing(12)
 
         top_container = QFrame()
         top_container.setStyleSheet("""QFrame { background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #e6f0ff, stop:1 #dbeafe); border-radius: 12px; }""")
         top_container.setFixedHeight(84)
         top_shadow = QGraphicsDropShadowEffect(self); top_shadow.setBlurRadius(20); top_shadow.setOffset(0, 4); top_shadow.setColor(QColor(13, 42, 148, 30))
         top_container.setGraphicsEffect(top_shadow)
-        top_layout = QHBoxLayout(top_container)
-        top_layout.setContentsMargins(12, 10, 12, 10)
+        top_layout = QHBoxLayout(top_container); top_layout.setContentsMargins(12, 10, 12, 10)
 
         logo = QLabel()
         pix = QPixmap("logo.png")
@@ -828,12 +806,23 @@ class MainWindow(QWidget):
         top_layout.addWidget(title)
         top_layout.addStretch()
 
-        user_badge = QLabel(f"{self.user['username']} ({self.user['role']})")
+        # show only role (admin or staff)
+        user_badge = QLabel(self.user.get("role", ""))
         user_badge.setStyleSheet("color:#08306b; padding:6px 8px; background: rgba(255,255,255,0.35); border-radius:8px;")
         top_layout.addWidget(user_badge)
 
+        # logout as red button
         logout = QPushButton("Logout")
-        logout.setStyleSheet("""QPushButton { background-color: white; color: #0b3b7a; padding:6px 10px; border-radius:8px; border: 1px solid rgba(15, 46, 100, 0.08); } QPushButton:hover { background-color: #f2f7ff; }""")
+        logout.setStyleSheet("""
+            QPushButton {
+                background-color: #ef4444;
+                color: white;
+                padding:6px 10px;
+                border-radius:8px;
+                border: 1px solid rgba(15, 46, 100, 0.08);
+            }
+            QPushButton:hover { background-color: #dc2626; }
+        """)
         logout.clicked.connect(self.logout)
         top_layout.addWidget(logout)
 
@@ -920,17 +909,11 @@ class MainWindow(QWidget):
 
 def run_app():
     app = QApplication(sys.argv)
-    # Application-level stylesheet: set the mainWindow background (prevents the default gray)
-    app.setStyleSheet("QWidget#mainWindow { background-color: #f3f7ff; } QDialog { background-color: #eef7ff; }")
     while True:
         login = LoginDialog()
         if login.exec() == QDialog.DialogCode.Accepted and login.user:
             w = MainWindow(login.user)
-            w.show()
-            try:
-                w.center_on_screen()
-            except Exception:
-                pass
+            w.showMaximized()
             app.exec()
             continue
         else:
