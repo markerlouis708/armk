@@ -1,14 +1,15 @@
 # SHS Enrollment System (PyQt6)
-# Changes:
-# - Redesigned RecordDialog: modern header, colored background, status badge, notes area, documents placeholder
-# - Dialog centers itself over parent when opened
-# - Keeps admin double-click disabled (admin won't open record by double-click) but RecordDialog is used when staff opens a record
+# Changes in this version:
+# - Removed Notes and Documents sections from both the RecordDialog and the right-side detail pane.
+# - Made the main window background explicit (application-level stylesheet) so it no longer appears the default gray.
+# - Ensured dialogs keep their soft backgrounds while main window uses a pleasant page background.
+# - Kept the compact, responsive details layout for 1366x763.
 
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QLineEdit, QMessageBox, QDialog, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QGraphicsDropShadowEffect, QSizePolicy, QGroupBox,
-    QComboBox, QFormLayout, QTextEdit
+    QComboBox, QFormLayout, QTextEdit, QScrollArea, QGridLayout
 )
 from PyQt6.QtGui import QPixmap, QColor, QFont
 from PyQt6.QtCore import Qt
@@ -53,6 +54,7 @@ class LoginDialog(QDialog):
         self.setWindowTitle("Login")
         self.setMinimumSize(420, 360)
         self.user = None
+        # Dialog background kept soft
         self.setStyleSheet("background-color: #eef7ff;")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -138,15 +140,6 @@ class LoginDialog(QDialog):
 
 
 class RecordDialog(QDialog):
-    """
-    Redesigned student record dialog:
-    - gradient header with avatar, name, id, status badge
-    - two-column body with personal/contact and academic/guardian info
-    - notes (read-only) and documents placeholder
-    - admin gets a status combobox + Save, staff sees read-only status
-    - dialog background is a cool soft color
-    - dialog centers over parent when shown
-    """
     def __init__(self, student: dict, original_index: int = -1, role: str = "staff", parent=None):
         super().__init__(parent)
         self.student = student or {}
@@ -155,7 +148,7 @@ class RecordDialog(QDialog):
         self.setWindowTitle("Student Record")
         self.setMinimumSize(640, 420)
 
-        # Soft blue background for the dialog
+        # Dialog background kept soft
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0 y1:0, x2:1 y2:1,
@@ -164,19 +157,12 @@ class RecordDialog(QDialog):
             QLabel.heading { font-size: 16px; font-weight: 700; color: #07204a; }
             QLabel.sub { color: #44556a; }
             QFrame.record-card { background: white; border-radius: 12px; }
-            QLabel.badge {
-                border-radius: 10px;
-                padding: 6px 10px;
-                color: white;
-                font-weight: 700;
-            }
         """)
 
         main = QVBoxLayout(self)
         main.setContentsMargins(12, 12, 12, 12)
         main.setSpacing(12)
 
-        # Header - gradient strip with avatar, name, id, and status badge
         header = QFrame()
         header.setFixedHeight(96)
         header.setStyleSheet("""
@@ -197,11 +183,8 @@ class RecordDialog(QDialog):
         avatar.setStyleSheet("background-color: #e0efff; color: #0b3b7a; border-radius: 36px; font-weight:800; font-size:20px;")
         header_layout.addWidget(avatar)
 
-        # Name + id
         name_block = QVBoxLayout()
         name_lbl = QLabel(f"{self.student.get('first_name','')} {self.student.get('last_name','')}")
-        name_lbl.setObjectName("name_lbl")
-        name_lbl.setProperty("class", "heading")
         name_lbl.setStyleSheet("font-size:16px; font-weight:800; color: #07204a;")
         name_block.addWidget(name_lbl)
         sid = self.student.get("student_id", "") or self.student.get("id", "")
@@ -211,90 +194,61 @@ class RecordDialog(QDialog):
         header_layout.addLayout(name_block)
         header_layout.addStretch()
 
-        # Status badge (colored)
         status = self.student.get("status", "pending")
         badge = QLabel(status.capitalize())
         badge.setProperty("class", "badge")
+        badge.setStyleSheet("QLabel { padding:6px 8px; border-radius:10px; font-weight:700; font-size:12px; }")
         if status == "approved":
-            badge.setStyleSheet("background-color:#16a34a; color: white; border-radius:10px; padding:6px 10px; font-weight:700;")
+            badge.setStyleSheet(badge.styleSheet() + " QLabel { background-color:#16a34a; color: white; }")
         elif status == "declined":
-            badge.setStyleSheet("background-color:#ef4444; color: white; border-radius:10px; padding:6px 10px; font-weight:700;")
+            badge.setStyleSheet(badge.styleSheet() + " QLabel { background-color:#ef4444; color: white; }")
         else:
-            badge.setStyleSheet("background-color:#f59e0b; color: white; border-radius:10px; padding:6px 10px; font-weight:700;")
+            badge.setStyleSheet(badge.styleSheet() + " QLabel { background-color:#f59e0b; color: white; }")
         header_layout.addWidget(badge, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         main.addWidget(header)
 
-        # Record card (white) with padding
         card = QFrame()
         card.setObjectName("record_card")
-        card.setProperty("class", "record-card")
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(14, 12, 14, 12)
         card_layout.setSpacing(12)
 
-        # Two column body
-        body_row = QHBoxLayout()
+        # Two-column grid for compact horizontal layout (no notes/docs)
+        info_grid = QGridLayout()
+        info_grid.setHorizontalSpacing(16)
+        info_grid.setVerticalSpacing(8)
 
-        # Left column: personal/contact
-        left = QFormLayout()
-        left.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        left.addRow("Date of birth:", QLabel(self.student.get("date_of_birth", "")))
-        left.addRow("Gender:", QLabel(self.student.get("gender", "")))
-        left.addRow("Email:", QLabel(self.student.get("email", "")))
-        left.addRow("Phone:", QLabel(self.student.get("phone", "")))
+        info_grid.addWidget(QLabel("Date of birth:"), 0, 0, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(self.student.get("date_of_birth", "")), 0, 1, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel("Gender:"), 1, 0, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(self.student.get("gender", "")), 1, 1, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel("Email:"), 2, 0, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(self.student.get("email", "")), 2, 1, Qt.AlignmentFlag.AlignLeft)
+
+        info_grid.addWidget(QLabel("Phone:"), 0, 2, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(self.student.get("phone", "")), 0, 3, Qt.AlignmentFlag.AlignLeft)
         g = self.student.get("guardian", {})
-        left.addRow("Guardian:", QLabel(f"{g.get('name','')} ({g.get('relation','')})"))
-        body_row.addLayout(left, 1)
-
-        # Right column: academic & submission info
-        right = QFormLayout()
+        info_grid.addWidget(QLabel("Guardian:"), 1, 2, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(f"{g.get('name','')} ({g.get('relation','')})"), 1, 3, Qt.AlignmentFlag.AlignLeft)
         a = self.student.get("academic", {})
-        right.addRow("Previous School:", QLabel(a.get("previous_school", "")))
-        right.addRow("Strand:", QLabel(a.get("strand", "")))
-        right.addRow("Semester:", QLabel(a.get("semester", "")))
-        right.addRow("School Year:", QLabel(a.get("school_year", "")))
-        right.addRow("Submitted by:", QLabel(f"{self.student.get('submitted_by','')} ({self.student.get('submitted_role','')})"))
-        body_row.addLayout(right, 1)
+        info_grid.addWidget(QLabel("Previous School:"), 2, 2, Qt.AlignmentFlag.AlignLeft)
+        info_grid.addWidget(QLabel(a.get("previous_school", "")), 2, 3, Qt.AlignmentFlag.AlignLeft)
 
-        card_layout.addLayout(body_row)
+        card_layout.addLayout(info_grid)
 
-        # Notes and documents area
-        lower_row = QHBoxLayout()
-
-        notes_box = QVBoxLayout()
-        notes_box.addWidget(QLabel("Notes:"))
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setReadOnly(True)
-        self.notes_edit.setPlaceholderText("No notes available.")
-        # if a 'notes' field exists show it
-        self.notes_edit.setText(self.student.get("notes", ""))
-        self.notes_edit.setMinimumHeight(80)
-        notes_box.addWidget(self.notes_edit)
-        lower_row.addLayout(notes_box, 2)
-
-        docs_box = QVBoxLayout()
-        docs_box.addWidget(QLabel("Documents:"))
-        docs_placeholder = QLabel("No documents uploaded.")
-        docs_placeholder.setStyleSheet("color:#6b7280; padding:12px; border:1px dashed #d1d5db; border-radius:8px;")
-        docs_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        docs_box.addWidget(docs_placeholder)
-        lower_row.addLayout(docs_box, 1)
-
-        card_layout.addLayout(lower_row)
-
-        # Buttons area
+        # Buttons area (no notes/docs)
         btn_row = QHBoxLayout()
         btn_row.addStretch()
         if self.role == "admin":
-            # admin can change status here too (in addition to main table controls)
             self.admin_status = QComboBox()
             self.admin_status.addItems(["pending", "approved", "declined"])
             try:
                 self.admin_status.setCurrentText(self.student.get("status", "pending"))
             except Exception:
                 pass
-            self.admin_status.setStyleSheet("padding:6px; border:1px solid #d0d7de; border-radius:6px;")
+            self.admin_status.setFixedWidth(140)
+            self.admin_status.setStyleSheet("padding:4px; font-size:12px; border-radius:6px;")
             save_btn = QPushButton("Save")
             save_btn.setStyleSheet("QPushButton { background-color:#0ea5a4; color: white; padding:8px 12px; border-radius:8px; }")
             save_btn.clicked.connect(self._save_and_close)
@@ -310,24 +264,26 @@ class RecordDialog(QDialog):
 
         main.addWidget(card)
 
-        # subtle shadow for dialog's main card
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(16)
+        shadow.setBlurRadius(12)
         shadow.setOffset(0, 6)
         shadow.setColor(QColor(0, 0, 0, 20))
         card.setGraphicsEffect(shadow)
 
-        # center relative to parent
         self._center_to_parent()
 
     def _center_to_parent(self):
-        # center dialog relative to parent (if available) otherwise center on primary screen
         parent = self.parent()
         if parent and parent.isVisible():
             pw = parent.frameGeometry().width()
             ph = parent.frameGeometry().height()
             px = parent.frameGeometry().x()
             py = parent.frameGeometry().y()
+            max_w = max(300, int(pw * 0.95))
+            max_h = max(300, int(ph * 0.95))
+            new_w = min(self.width(), max_w)
+            new_h = min(self.height(), max_h)
+            self.resize(new_w, new_h)
             x = px + (pw - self.width()) // 2
             y = py + (ph - self.height()) // 2
             self.move(max(0, x), max(0, y))
@@ -337,12 +293,16 @@ class RecordDialog(QDialog):
                 screen = app.primaryScreen()
                 if screen:
                     sg = screen.availableGeometry()
+                    max_w = int(sg.width() * 0.9)
+                    max_h = int(sg.height() * 0.9)
+                    new_w = min(self.width(), max_w)
+                    new_h = min(self.height(), max_h)
+                    self.resize(new_w, new_h)
                     x = sg.x() + (sg.width() - self.width()) // 2
                     y = sg.y() + (sg.height() - self.height()) // 2
                     self.move(max(0, x), max(0, y))
 
     def _save_and_close(self):
-        # Only for admin: save new status
         if not hasattr(self, "admin_status"):
             self.accept()
             return
@@ -360,19 +320,20 @@ class RecordDialog(QDialog):
 
 class StudentsTable(QWidget):
     """
-    Redesigned: left = search/filter/table; right = details card with role-based actions.
+    Left: table (narrower)
+    Right: wider responsive detail pane (no notes/docs), using a scroll area and a compact two-column grid
+    Designed for 1366x763 landscape.
     """
     def __init__(self, role="staff", parent=None):
         super().__init__(parent)
         self.role = role
         self.filter_text = ""
         self.filter_status = "All"
-        self.current_entries = []  # filtered entries in current table order
+        self.current_entries = []
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        # Single card container (search + table + detail)
         container = QFrame()
         container.setStyleSheet("QFrame { background-color: white; border-radius: 12px; border: 1px solid #e8eef8; padding: 12px; }")
         shadow = QGraphicsDropShadowEffect(self); shadow.setBlurRadius(10); shadow.setOffset(0, 3); shadow.setColor(QColor(0, 0, 0, 20))
@@ -382,7 +343,7 @@ class StudentsTable(QWidget):
         container_layout.setContentsMargins(8, 8, 8, 8)
         container_layout.setSpacing(12)
 
-        # Left column: search + status filter + table
+        # Left (table area)
         left_col = QVBoxLayout()
         top_row = QHBoxLayout()
         self.search_edit = QLineEdit()
@@ -408,81 +369,109 @@ class StudentsTable(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.setWordWrap(False)
-        self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
         self.table.itemSelectionChanged.connect(self._on_selection_changed)
         self.table.verticalHeader().setVisible(False)
         self.table.setStyleSheet("QTableWidget { border: none; }")
         left_col.addWidget(self.table, 1)
 
-        container_layout.addLayout(left_col, 2)  # left column larger
+        container_layout.addLayout(left_col, 1)  # give table less weight
 
-        # Right column: detail card
-        detail_card = QFrame()
-        detail_card.setStyleSheet("QFrame { background-color: #f8fbff; border-radius: 10px; padding: 12px; }")
-        detail_layout = QVBoxLayout(detail_card)
-        detail_layout.setContentsMargins(8, 8, 8, 8)
-        detail_layout.setSpacing(8)
+        # Right (detail pane) wrapped in a scroll area and arranged as grid for compactness
+        self.detail_widget = QFrame()
+        self.detail_widget.setStyleSheet("QFrame { background-color: #f8fbff; border-radius: 10px; padding: 12px; } QLabel { font-size: 12px; }")
+        self.detail_widget.setMinimumWidth(520)  # suited for 1366 width
+        detail_v = QVBoxLayout(self.detail_widget)
+        detail_v.setContentsMargins(8, 8, 8, 8)
+        detail_v.setSpacing(8)
 
-        # Avatar + name + id
+        # header: avatar + compact status (left) and admin combo/right badge (right)
+        hdr = QHBoxLayout()
+        left_hdr = QHBoxLayout()
+        left_hdr.setSpacing(8)
         self.lbl_avatar = QLabel("")
-        self.lbl_avatar.setFixedSize(64, 64)
+        self.lbl_avatar.setFixedSize(56, 56)
         self.lbl_avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_avatar.setStyleSheet("background-color: #e6f0ff; color: #1e40af; border-radius: 32px; font-weight:700; font-size:18px;")
-        detail_layout.addWidget(self.lbl_avatar, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.lbl_avatar.setStyleSheet("background-color: #e6f0ff; color: #1e40af; border-radius: 28px; font-weight:700; font-size:16px;")
+        left_hdr.addWidget(self.lbl_avatar)
 
-        self.lbl_name = QLabel("Select a student")
-        self.lbl_name.setStyleSheet("font-weight:700; font-size:14px;")
-        self.lbl_name.setWordWrap(True)
-        detail_layout.addWidget(self.lbl_name, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.lbl_status_small = QLabel("")
+        self.lbl_status_small.setStyleSheet("color:#374151; font-size:11px; padding-left:6px;")
+        left_hdr.addWidget(self.lbl_status_small)
+        hdr.addLayout(left_hdr)
+        hdr.addStretch()
 
-        self.lbl_student_id = QLabel("")
-        detail_layout.addWidget(self.lbl_student_id, 0, Qt.AlignmentFlag.AlignHCenter)
-
-        # Info fields
-        self.info_layout = QFormLayout()
-        self.info_layout.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.info_labels = {
-            "dob": QLabel(""),
-            "gender": QLabel(""),
-            "email": QLabel(""),
-            "phone": QLabel(""),
-            "guardian": QLabel(""),
-            "strand": QLabel(""),
-            "status": QLabel("")
-        }
-        self.info_layout.addRow("Date of birth:", self.info_labels["dob"])
-        self.info_layout.addRow("Gender:", self.info_labels["gender"])
-        self.info_layout.addRow("Email:", self.info_labels["email"])
-        self.info_layout.addRow("Phone:", self.info_labels["phone"])
-        self.info_layout.addRow("Guardian:", self.info_labels["guardian"])
-        self.info_layout.addRow("Strand:", self.info_labels["strand"])
-        self.info_layout.addRow("Status:", self.info_labels["status"])
-        detail_layout.addLayout(self.info_layout)
-
-        detail_layout.addStretch()
-
-        # Role-specific actions
-        action_row = QHBoxLayout()
-        action_row.addStretch()
         if self.role == "admin":
             self.admin_status_combo = QComboBox()
             self.admin_status_combo.addItems(["pending", "approved", "declined"])
-            self.admin_status_combo.setStyleSheet("padding:6px; border:1px solid #d0d7de; border-radius:6px;")
+            self.admin_status_combo.setFixedWidth(150)
+            self.admin_status_combo.setStyleSheet("padding:4px; border-radius:6px; font-size:12px;")
+            hdr.addWidget(self.admin_status_combo)
+        else:
+            self.detail_status_badge = QLabel("")
+            self.detail_status_badge.setFixedHeight(26)
+            self.detail_status_badge.setStyleSheet("padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px;")
+            hdr.addWidget(self.detail_status_badge)
+
+        detail_v.addLayout(hdr)
+
+        # name + id
+        self.lbl_name = QLabel("Select a student")
+        self.lbl_name.setStyleSheet("font-weight:700; font-size:13px;")
+        self.lbl_name.setWordWrap(True)
+        detail_v.addWidget(self.lbl_name)
+
+        self.lbl_student_id = QLabel("")
+        self.lbl_student_id.setStyleSheet("color:#0b355e; font-size:12px;")
+        detail_v.addWidget(self.lbl_student_id)
+
+        # compact grid for details (two columns of key/value pairs)
+        self.grid = QGridLayout()
+        self.grid.setHorizontalSpacing(16)
+        self.grid.setVerticalSpacing(8)
+
+        self.grid_labels = {
+            'dob': QLabel(""), 'gender': QLabel(""), 'email': QLabel(""),
+            'phone': QLabel(""), 'guardian': QLabel(""), 'strand': QLabel(""),
+            'semester': QLabel(""), 'school_year': QLabel(""), 'submitted_by': QLabel("")
+        }
+        for lbl in self.grid_labels.values():
+            lbl.setStyleSheet("font-size:11px; color:#0b1726;")
+
+        keys = [
+            ("Date of birth:", 'dob'),
+            ("Gender:", 'gender'),
+            ("Email:", 'email'),
+            ("Phone:", 'phone'),
+            ("Guardian:", 'guardian'),
+            ("Strand:", 'strand'),
+            ("Semester:", 'semester'),
+            ("School Year:", 'school_year'),
+            ("Submitted by:", 'submitted_by')
+        ]
+        for idx, (ktext, key) in enumerate(keys):
+            row = idx // 2
+            col_base = (idx % 2) * 2
+            self.grid.addWidget(QLabel(ktext), row, col_base, Qt.AlignmentFlag.AlignLeft)
+            self.grid.addWidget(self.grid_labels[key], row, col_base + 1, Qt.AlignmentFlag.AlignLeft)
+
+        detail_v.addLayout(self.grid)
+
+        # action row
+        action_row = QHBoxLayout()
+        action_row.addStretch()
+        if self.role == "admin":
             self.save_status_btn = QPushButton("Save Status")
             self.save_status_btn.setStyleSheet("QPushButton { background-color:#10b981; color: white; padding:8px 12px; border-radius:8px; }")
             self.save_status_btn.clicked.connect(self._admin_save_status)
-            action_row.addWidget(self.admin_status_combo)
             action_row.addWidget(self.save_status_btn)
-        else:
-            self.open_record_btn = QPushButton("Open Record")
-            self.open_record_btn.setStyleSheet("QPushButton { background-color: #2563eb; color: white; padding:8px 12px; border-radius:8px; }")
-            self.open_record_btn.clicked.connect(self._open_selected_record)
-            self.open_record_btn.setEnabled(False)
-            action_row.addWidget(self.open_record_btn)
+        detail_v.addLayout(action_row)
 
-        detail_layout.addLayout(action_row)
+        # wrap the detail widget in a scroll area to avoid overflow
+        self.detail_scroll = QScrollArea()
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setWidget(self.detail_widget)
 
-        container_layout.addWidget(detail_card, 1)  # right column narrower
+        container_layout.addWidget(self.detail_scroll, 2)  # right column wider
 
         outer.addWidget(container)
         self.refresh_table()
@@ -553,7 +542,6 @@ class StudentsTable(QWidget):
         header.setSectionsMovable(False)
         header.setStretchLastSection(False)
 
-        # Clear detail view when table refreshes
         self._clear_detail()
 
     def _find_original_index(self, student_dict):
@@ -591,46 +579,60 @@ class StudentsTable(QWidget):
         student_id = s.get("student_id") or s.get("id") or (f"SID-{orig_index+1:04d}" if orig_index >= 0 else "")
         self.lbl_student_id.setText(f"ID: {student_id}")
 
-        self.info_labels["dob"].setText(s.get("date_of_birth", ""))
-        self.info_labels["gender"].setText(s.get("gender", ""))
-        self.info_labels["email"].setText(s.get("email", ""))
-        self.info_labels["phone"].setText(s.get("phone", ""))
+        self.grid_labels['dob'].setText(s.get("date_of_birth", ""))
+        self.grid_labels['gender'].setText(s.get("gender", ""))
+        self.grid_labels['email'].setText(s.get("email", ""))
+        self.grid_labels['phone'].setText(s.get("phone", ""))
         g = s.get("guardian", {})
-        self.info_labels["guardian"].setText(f"{g.get('name','')} ({g.get('relation','')})")
+        self.grid_labels['guardian'].setText(f"{g.get('name','')} ({g.get('relation','')})")
         a = s.get("academic", {})
-        self.info_labels["strand"].setText(a.get("strand", ""))
-        self.info_labels["status"].setText(s.get("status", "pending"))
+        self.grid_labels['strand'].setText(a.get("strand", ""))
+        self.grid_labels['semester'].setText(a.get("semester", ""))
+        self.grid_labels['school_year'].setText(a.get("school_year", ""))
+        self.grid_labels['submitted_by'].setText(f"{s.get('submitted_by','')} ({s.get('submitted_role','')})")
 
-        # Role-based UI state
+        status_text = s.get("status", "pending").capitalize()
+        self.lbl_status_small.setText(status_text)
+
         if self.role == "admin":
             try:
                 self.admin_status_combo.setCurrentText(s.get("status", "pending"))
             except Exception:
                 pass
         else:
-            self.open_record_btn.setEnabled(True)
+            st = s.get("status", "pending")
+            if st == "approved":
+                self.detail_status_badge.setStyleSheet("padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px; background-color:#16a34a; color:white;")
+            elif st == "declined":
+                self.detail_status_badge.setStyleSheet("padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px; background-color:#ef4444; color:white;")
+            else:
+                self.detail_status_badge.setStyleSheet("padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px; background-color:#f59e0b; color:white;")
+            self.detail_status_badge.setText(status_text)
 
     def _clear_detail(self):
         self.lbl_avatar.setText("")
         self.lbl_name.setText("Select a student")
         self.lbl_student_id.setText("")
-        for k in self.info_labels:
-            self.info_labels[k].setText("")
-        if self.role != "admin":
-            self.open_record_btn.setEnabled(False)
+        for k in self.grid_labels:
+            try:
+                self.grid_labels[k].setText("")
+            except Exception:
+                pass
+        self.lbl_status_small.setText("")
+        if self.role == "admin":
+            try:
+                self.admin_status_combo.setCurrentIndex(0)
+            except Exception:
+                pass
+        else:
+            try:
+                self.detail_status_badge.setText("")
+                self.detail_status_badge.setStyleSheet("padding:4px 8px; border-radius:10px; font-weight:700; font-size:11px;")
+            except Exception:
+                pass
 
     def _on_cell_double_clicked(self, row, column):
-        # ADMIN: do NOT open the RecordDialog on double-click (preserved behavior)
-        if self.role == "admin":
-            return
-
-        # STAFF: open record as before
-        if 0 <= row < len(self.current_entries):
-            s = self.current_entries[row]
-            orig_index = self._find_original_index(s)
-            dlg = RecordDialog(s, original_index=orig_index, role=self.role, parent=self)
-            if dlg.exec() == QDialog.DialogCode.Accepted:
-                self.refresh_table()
+        return
 
     def _open_selected_record(self):
         sel = self.table.selectedIndexes()
@@ -793,22 +795,20 @@ class StudentForm(QWidget):
 class MainWindow(QWidget):
     def __init__(self, user):
         super().__init__()
+        self.setObjectName("mainWindow")  # used by application stylesheet
         self.user = user or {"username": "unknown", "role": "staff"}
         self.setWindowTitle(f"SHS Enrollment System - {self.user['username']} ({self.user['role']})")
         self.setMinimumSize(1000, 640)
 
+        # Set a pleasant page background color for the main window
+        # (frames/cards inside remain white or their own colors)
+        self.setStyleSheet("QWidget#mainWindow { background-color: #f3f7ff; }")
+
         main_layout = QVBoxLayout(self); main_layout.setContentsMargins(18, 18, 18, 18)
         main_layout.setSpacing(12)
 
-        # Blue top container (cool palette) with rounded corners and subtle shadow
         top_container = QFrame()
-        top_container.setStyleSheet("""
-            QFrame {
-                background: qlineargradient(x1:0 y1:0, x2:1 y2:0,
-                                            stop:0 #e6f0ff, stop:1 #dbeafe);
-                border-radius: 12px;
-            }
-        """)
+        top_container.setStyleSheet("""QFrame { background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #e6f0ff, stop:1 #dbeafe); border-radius: 12px; }""")
         top_container.setFixedHeight(84)
         top_shadow = QGraphicsDropShadowEffect(self); top_shadow.setBlurRadius(20); top_shadow.setOffset(0, 4); top_shadow.setColor(QColor(13, 42, 148, 30))
         top_container.setGraphicsEffect(top_shadow)
@@ -828,29 +828,17 @@ class MainWindow(QWidget):
         top_layout.addWidget(title)
         top_layout.addStretch()
 
-        # user badge inside top container
         user_badge = QLabel(f"{self.user['username']} ({self.user['role']})")
         user_badge.setStyleSheet("color:#08306b; padding:6px 8px; background: rgba(255,255,255,0.35); border-radius:8px;")
         top_layout.addWidget(user_badge)
 
-        # logout as compact white button to contrast against blue
         logout = QPushButton("Logout")
-        logout.setStyleSheet("""
-            QPushButton {
-                background-color: white;
-                color: #0b3b7a;
-                padding:6px 10px;
-                border-radius:8px;
-                border: 1px solid rgba(15, 46, 100, 0.08);
-            }
-            QPushButton:hover { background-color: #f2f7ff; }
-        """)
+        logout.setStyleSheet("""QPushButton { background-color: white; color: #0b3b7a; padding:6px 10px; border-radius:8px; border: 1px solid rgba(15, 46, 100, 0.08); } QPushButton:hover { background-color: #f2f7ff; }""")
         logout.clicked.connect(self.logout)
         top_layout.addWidget(logout)
 
         main_layout.addWidget(top_container)
 
-        # Foreground card (rest of the UI)
         foreground = QFrame()
         foreground.setStyleSheet("QFrame { background-color: white; border-radius: 12px; padding: 18px; border:1px solid #e6eef9; }")
         fg_shadow = QGraphicsDropShadowEffect(self); fg_shadow.setBlurRadius(18); fg_shadow.setOffset(0, 6); fg_shadow.setColor(QColor(0, 0, 0, 20))
@@ -879,22 +867,12 @@ class MainWindow(QWidget):
         else:
             label = QLabel("Manage Students"); label.setStyleSheet("font-weight:600; font-size:14px;")
             fg_layout.addWidget(label)
-            quick_row = QHBoxLayout(); quick_row.addWidget(QLabel("Quick filters:"))
-            btn_all = QPushButton("All"); btn_pending = QPushButton("Pending"); btn_approved = QPushButton("Approved"); btn_declined = QPushButton("Declined")
-            for b in (btn_all, btn_pending, btn_approved, btn_declined):
-                b.setFixedHeight(28); b.setStyleSheet("QPushButton { background-color: white; border:1px solid #d6dbe7; border-radius:6px; padding:6px 10px; } QPushButton:hover { background-color:#f7fafc; }")
-            btn_all.clicked.connect(lambda: self._set_admin_filter("All")); btn_pending.clicked.connect(lambda: self._set_admin_filter("pending"))
-            btn_approved.clicked.connect(lambda: self._set_admin_filter("approved")); btn_declined.clicked.connect(lambda: self._set_admin_filter("declined"))
-            quick_row.addWidget(btn_all); quick_row.addWidget(btn_pending); quick_row.addWidget(btn_approved); quick_row.addWidget(btn_declined); quick_row.addStretch()
-            fg_layout.addLayout(quick_row)
-
             self.table_widget = StudentsTable(role="admin"); fg_layout.addWidget(self.table_widget)
 
         main_layout.addWidget(foreground)
         self.setLayout(main_layout)
 
     def center_on_screen(self):
-        # Centers the window on the primary screen's available geometry
         app = QApplication.instance()
         if app is None:
             return
@@ -942,6 +920,8 @@ class MainWindow(QWidget):
 
 def run_app():
     app = QApplication(sys.argv)
+    # Application-level stylesheet: set the mainWindow background (prevents the default gray)
+    app.setStyleSheet("QWidget#mainWindow { background-color: #f3f7ff; } QDialog { background-color: #eef7ff; }")
     while True:
         login = LoginDialog()
         if login.exec() == QDialog.DialogCode.Accepted and login.user:
